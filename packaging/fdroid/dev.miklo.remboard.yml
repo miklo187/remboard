@@ -13,18 +13,25 @@ Repo: https://github.com/miklo187/remboard.git
 Binaries: https://github.com/miklo187/remboard/releases/download/v%v/remboard-%v.apk
 
 Builds:
-  - versionName: '0.1.2'
+  - versionName: 0.1.2
     versionCode: 3
     commit: 67144e68407a91b4ca6e0af470d0ed070d0eaa10
     subdir: app-android
-    submodules: yes
+    submodules: true
     gradle:
       - yes
+    scandelete:
+      - third_party/abseil-cpp/absl/time/internal/cctz/testdata
+      - third_party/protobuf/compatibility
+      - third_party/protobuf/examples
+      - third_party/protobuf/objectivec
+      - third_party/protobuf/rust
+      - third_party/protobuf/src/google/protobuf/testdata
     ndk: 28.2.13676358
 
 AllowedAPKSigningKeys: 289a9ec0159f06671579044ea03516ec8e1787946f7330aac40605c521b84ac1
 
-AutoUpdateMode: Version %v
+AutoUpdateMode: Version
 UpdateCheckMode: Tags
-CurrentVersion: '0.1.2'
+CurrentVersion: 0.1.2
 CurrentVersionCode: 3
