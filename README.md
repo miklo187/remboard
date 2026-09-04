@@ -13,6 +13,15 @@ Send text and files between your phone and PC over the local network — end-to-
 - **LAN discovery** — devices find each other automatically via mDNS/Avahi once paired.
 - **No servers, no accounts** — everything travels directly between your devices on the same network.
 
+## Screenshots
+
+<table>
+<tr>
+<td><img src="screenshots/desktop.jpg" width="420" alt="Linux desktop app"></td>
+<td><img src="screenshots/android.jpg" width="220" alt="Android app"></td>
+</tr>
+</table>
+
 ## How it works
 
 ```

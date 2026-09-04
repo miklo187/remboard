@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Same brand blue hue, lightened for contrast on a dark surface. -->
+    <color name="remboard_primary">#AEC6FF</color>
+    <color name="remboard_on_primary">#002E6B</color>
+    <color name="remboard_primary_container">#0B3D91</color>
+    <color name="remboard_on_primary_container">#DCE6FF</color>
+</resources>
