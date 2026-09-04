@@ -9,16 +9,40 @@ include(FetchContent)
 
 option(REMBOARD_VENDOR_DEPS "Fetch+build zmq/sodium/protobuf instead of using system packages" ${ANDROID})
 
+# Everything FetchContent'd below (libsodium/libzmq/protobuf's transitive
+# abseil-cpp when REMBOARD_VENDOR_DEPS is on, plus cppzmq/nlohmann_json
+# always) is also vendored as a git submodule under third_party/. When a
+# submodule has been checked out, it's used directly instead of fetching
+# over the network -- required for offline/reproducible builders (e.g.
+# F-Droid's) that don't have network access during the build. Falls back
+# to the network fetch when third_party/ isn't populated (git clone
+# without --recurse-submodules), so that isn't a hard requirement for
+# everyone else.
+set(REMBOARD_THIRD_PARTY_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../third_party")
+function(remboard_vendored dep_name check_file out_var)
+  set(_dir "${REMBOARD_THIRD_PARTY_DIR}/${dep_name}")
+  if(EXISTS "${_dir}/${check_file}")
+    set(${out_var} "${_dir}" PARENT_SCOPE)
+  else()
+    set(${out_var} "" PARENT_SCOPE)
+  endif()
+endfunction()
+
 if(REMBOARD_VENDOR_DEPS)
   # libsodium ships no CMake build system; it's cross-compiled once (per
   # ABI) via its own officially-supported dist-build scripts (autotools
   # under the hood), and the result is fed to libzmq's Findsodium.cmake by
   # pre-populating the cache variables it looks for.
-  FetchContent_Declare(
-    libsodium_src
-    GIT_REPOSITORY https://github.com/jedisct1/libsodium
-    GIT_TAG 1.0.22)
-  FetchContent_Populate(libsodium_src)
+  remboard_vendored(libsodium dist-build libsodium_local)
+  if(libsodium_local)
+    set(libsodium_src_SOURCE_DIR "${libsodium_local}")
+  else()
+    FetchContent_Declare(
+      libsodium_src
+      GIT_REPOSITORY https://github.com/jedisct1/libsodium
+      GIT_TAG 1.0.22)
+    FetchContent_Populate(libsodium_src)
+  endif()
 
   if(ANDROID_ABI STREQUAL "arm64-v8a")
     set(_sodium_script "android-armv8-a.sh")
@@ -82,11 +106,16 @@ if(REMBOARD_VENDOR_DEPS)
   # bionic libc already provides strlcpy, so this isn't needed at all.
   set(WITH_LIBBSD OFF CACHE BOOL "" FORCE)
 
-  FetchContent_Declare(
-    libzmq
-    GIT_REPOSITORY https://github.com/zeromq/libzmq
-    GIT_TAG v4.3.5)
-  FetchContent_MakeAvailable(libzmq)
+  remboard_vendored(libzmq CMakeLists.txt libzmq_local)
+  if(libzmq_local)
+    add_subdirectory(${libzmq_local} ${CMAKE_CURRENT_BINARY_DIR}/libzmq_build)
+  else()
+    FetchContent_Declare(
+      libzmq
+      GIT_REPOSITORY https://github.com/zeromq/libzmq
+      GIT_TAG v4.3.5)
+    FetchContent_MakeAvailable(libzmq)
+  endif()
 
   # protobuf's own CMake build (protoc itself is never invoked here --
   # proto/CMakeLists.txt always locates and runs the *host* protoc; this is
@@ -101,15 +130,29 @@ if(REMBOARD_VENDOR_DEPS)
   set(protobuf_INSTALL OFF CACHE BOOL "" FORCE)
   set(protobuf_WITH_ZLIB OFF CACHE BOOL "" FORCE)
 
+  # protobuf's own cmake/abseil-cpp.cmake FetchContents abseil itself unless
+  # an absl::strings target already exists -- add_subdirectory'ing the
+  # vendored copy first (when present) heads that off, whether or not
+  # protobuf itself came from third_party/ below.
+  remboard_vendored(abseil-cpp CMakeLists.txt abseil_local)
+  if(abseil_local)
+    add_subdirectory(${abseil_local} ${CMAKE_CURRENT_BINARY_DIR}/abseil_build)
+  endif()
+
   # Must match the host protoc's version exactly (protobuf enforces an
   # exact generator/runtime match for C++ at compile time, not just
   # ABI-compatible-or-newer) -- `protoc --version` on this machine reports
   # "libprotoc 36.0".
-  FetchContent_Declare(
-    protobuf
-    GIT_REPOSITORY https://github.com/protocolbuffers/protobuf
-    GIT_TAG v36.0)
-  FetchContent_MakeAvailable(protobuf)
+  remboard_vendored(protobuf CMakeLists.txt protobuf_local)
+  if(protobuf_local)
+    add_subdirectory(${protobuf_local} ${CMAKE_CURRENT_BINARY_DIR}/protobuf_build)
+  else()
+    FetchContent_Declare(
+      protobuf
+      GIT_REPOSITORY https://github.com/protocolbuffers/protobuf
+      GIT_TAG v36.0)
+    FetchContent_MakeAvailable(protobuf)
+  endif()
 else()
   pkg_check_modules(ZMQ REQUIRED IMPORTED_TARGET libzmq)
   pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium)
@@ -123,19 +166,29 @@ if(NOT ANDROID)
   pkg_check_modules(AVAHI REQUIRED IMPORTED_TARGET avahi-client)
 endif()
 
-FetchContent_Declare(
-  cppzmq
-  GIT_REPOSITORY https://github.com/zeromq/cppzmq
-  GIT_TAG v4.10.0)
 set(CPPZMQ_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(cppzmq)
+remboard_vendored(cppzmq CMakeLists.txt cppzmq_local)
+if(cppzmq_local)
+  add_subdirectory(${cppzmq_local} ${CMAKE_CURRENT_BINARY_DIR}/cppzmq_build)
+else()
+  FetchContent_Declare(
+    cppzmq
+    GIT_REPOSITORY https://github.com/zeromq/cppzmq
+    GIT_TAG v4.10.0)
+  FetchContent_MakeAvailable(cppzmq)
+endif()
 
-FetchContent_Declare(
-  nlohmann_json
-  GIT_REPOSITORY https://github.com/nlohmann/json
-  GIT_TAG v3.11.3)
 set(JSON_BuildTests OFF CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(nlohmann_json)
+remboard_vendored(nlohmann_json CMakeLists.txt nlohmann_json_local)
+if(nlohmann_json_local)
+  add_subdirectory(${nlohmann_json_local} ${CMAKE_CURRENT_BINARY_DIR}/nlohmann_json_build)
+else()
+  FetchContent_Declare(
+    nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json
+    GIT_TAG v3.11.3)
+  FetchContent_MakeAvailable(nlohmann_json)
+endif()
 
 add_library(remboard_core STATIC
   src/core.cpp

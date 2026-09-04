@@ -2,13 +2,15 @@
 # metadata/ directory (as dev.miklo.remboard.yml) when submitting a merge
 # request there: https://gitlab.com/fdroid/fdroiddata
 #
-# NOT YET SUBMITTABLE AS-IS -- see the "Known blockers" note at the bottom
-# before opening the MR. F-Droid's build servers have no network access
-# during the build, and core/CMakeLists.txt currently fetches libsodium,
-# libzmq, and protobuf from GitHub via CMake FetchContent when building for
-# Android (REMBOARD_VENDOR_DEPS defaults on for ANDROID builds). That has to
-# be resolved -- via F-Droid's srclibs mechanism or vendored sources -- for
-# a real build to succeed on their infrastructure.
+# The two build-portability blockers this needed are resolved as of
+# v0.1.1: libsodium, libzmq, protobuf (and its transitive abseil-cpp
+# dependency), cppzmq, and nlohmann_json are all vendored as git
+# submodules under third_party/ instead of being fetched over the network
+# mid-build (core/CMakeLists.txt prefers the local submodule when present,
+# falling back to the network fetch otherwise -- see its comments), and
+# the build no longer hardcodes a host-specific protoc path. Verified with
+# a full clean rebuild that no network fetches happen for those five
+# dependencies.
 
 Categories:
   - Connectivity
@@ -30,26 +32,16 @@ RepoType: git
 Repo: https://github.com/miklo187/remboard.git
 
 Builds:
-  - versionName: '0.1.0'
-    versionCode: 1
-    commit: v0.1.0
+  - versionName: '0.1.1'
+    versionCode: 2
+    commit: v0.1.1
     subdir: app-android
+    submodules: yes
     gradle:
       - yes
     ndk: 28.2.13676358
-    # TODO before this build will actually succeed on F-Droid's offline
-    # builder:
-    #   1. core/CMakeLists.txt's FetchContent_Declare calls for libsodium,
-    #      libzmq (and protobuf, via proto/) need to become srclibs entries
-    #      (see F-Droid's srclibs docs) or committed/vendored sources --
-    #      the network fetch that works for a normal local/CI build isn't
-    #      available here.
-    #   2. app-android/app/build.gradle.kts hardcodes
-    #      -DProtobuf_PROTOC_EXECUTABLE=/usr/bin/protoc, which assumes a
-    #      path that may not exist on F-Droid's build image; needs to
-    #      resolve protoc portably instead (e.g. via a Gradle/CMake probe).
 
 AutoUpdateMode: Version %v
 UpdateCheckMode: Tags
-CurrentVersion: '0.1.0'
-CurrentVersionCode: 1
+CurrentVersion: '0.1.1'
+CurrentVersionCode: 2

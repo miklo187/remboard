@@ -23,8 +23,8 @@ android {
         applicationId = "dev.miklo.remboard"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
 
         externalNativeBuild {
             cmake {
@@ -32,10 +32,12 @@ android {
                 // shared library; this points it at the repo root so it can
                 // add_subdirectory(core) without duplicating the target.
                 arguments += "-DREMBOARD_ROOT=${rootDir}/.."
-                // protoc always runs on the host even in this cross-build;
-                // Gradle's environment doesn't reliably inherit the
-                // interactive shell's PATH, so point at it explicitly.
-                arguments += "-DProtobuf_PROTOC_EXECUTABLE=/usr/bin/protoc"
+                // proto/CMakeLists.txt locates the host protoc itself via
+                // find_program(), which also searches standard system
+                // directories (e.g. /usr/bin) regardless of this process's
+                // PATH -- no need to hardcode a path here, and doing so
+                // just breaks portability to machines where protoc lives
+                // somewhere else.
             }
         }
         ndk {

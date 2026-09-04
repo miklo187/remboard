@@ -1,0 +1,18 @@
+[submodule "third_party/cppzmq"]
+	path = third_party/cppzmq
+	url = https://github.com/zeromq/cppzmq
+[submodule "third_party/libsodium"]
+	path = third_party/libsodium
+	url = https://github.com/jedisct1/libsodium
+[submodule "third_party/libzmq"]
+	path = third_party/libzmq
+	url = https://github.com/zeromq/libzmq
+[submodule "third_party/nlohmann_json"]
+	path = third_party/nlohmann_json
+	url = https://github.com/nlohmann/json
+[submodule "third_party/protobuf"]
+	path = third_party/protobuf
+	url = https://github.com/protocolbuffers/protobuf
+[submodule "third_party/abseil-cpp"]
+	path = third_party/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp
