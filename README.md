@@ -2,6 +2,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Linux-blue)](#project-layout)
+[![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-blueviolet)](#ai-assisted-development)
 
 Send text and files between your phone and PC over the local network — end-to-end encrypted, no cloud, no account.
 
@@ -95,6 +96,10 @@ ctest --test-dir build
 | `proto/` | Protobuf message definitions shared by all platforms |
 | `app-android/` | Android app (Kotlin, JNI bridge into `core/`) |
 | `app-linux/` | Linux desktop app (webview-based UI over the C++ core) |
+
+## AI-assisted development
+
+This project is built in collaboration with [Claude Code](https://claude.com/claude-code) — architecture and code review stay with the maintainer, but a meaningful share of the implementation, UI work, and this documentation was written with AI assistance.
 
 ## License
 

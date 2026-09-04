@@ -1,5 +1,6 @@
 #include <unistd.h>
 
+#include <gtk/gtk.h>
 #include <webview/webview.h>
 
 #include <cstdlib>
@@ -11,10 +12,31 @@
 #include "bridge.h"
 #include "file_secret_store.h"
 #include "generated_html.h"
+#include "generated_icon.h"
 #include "remboard/core.h"
 #include "remboard/platform/discovery_avahi.h"
 
 namespace {
+
+// Decodes the embedded PNG and sets it as the window/taskbar icon. The
+// webview library has no icon API of its own, so this reaches into the
+// native GtkWindow it created (window() returns a GtkWindow* on the GTK
+// backend) directly.
+void set_window_icon(webview::webview& w) {
+  auto window = w.window();
+  if (!window.ok()) return;
+
+  GdkPixbufLoader* loader = gdk_pixbuf_loader_new();
+  GError* error = nullptr;
+  if (gdk_pixbuf_loader_write(loader, kIconPng, kIconPngLen, &error) &&
+      gdk_pixbuf_loader_close(loader, &error)) {
+    if (GdkPixbuf* pixbuf = gdk_pixbuf_loader_get_pixbuf(loader)) {
+      gtk_window_set_icon(GTK_WINDOW(window.value()), pixbuf);
+    }
+  }
+  if (error != nullptr) g_error_free(error);
+  g_object_unref(loader);
+}
 
 std::string default_display_name() {
   if (const char* host = std::getenv("HOSTNAME");
@@ -66,6 +88,7 @@ int main(int argc, char** argv) {
     webview::webview w(false, nullptr);
     w.set_title("remboard — " + hooks.display_name);
     w.set_size(920, 640, WEBVIEW_HINT_NONE);
+    set_window_icon(w);
 
     remboard_app::Bridge bridge(*core, w);
     bridge.register_handlers();

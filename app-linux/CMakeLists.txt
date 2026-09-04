@@ -29,11 +29,26 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/ui/index.html"
   "${CMAKE_CURRENT_SOURCE_DIR}/ui/app.js"
   "${CMAKE_CURRENT_SOURCE_DIR}/ui/style.css"
-  "${CMAKE_CURRENT_SOURCE_DIR}/ui/qrcode.min.js")
+  "${CMAKE_CURRENT_SOURCE_DIR}/ui/qrcode.min.js"
+  "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.png")
 configure_file(
   "${CMAKE_CURRENT_SOURCE_DIR}/src/generated_html.h.in"
   "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_html.h"
   @ONLY)
+
+# Same "no runtime assets" convention as the HTML above: the window icon is
+# baked into the binary as a byte array rather than shipped/looked up as a
+# separate file.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.png" REMBOARD_ICON_PNG_HEX HEX)
+string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," REMBOARD_ICON_PNG_ARRAY "${REMBOARD_ICON_PNG_HEX}")
+string(LENGTH "${REMBOARD_ICON_PNG_HEX}" _icon_hex_len)
+math(EXPR REMBOARD_ICON_PNG_LEN "${_icon_hex_len} / 2")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/generated/generated_icon.h"
+"#pragma once
+#include <cstddef>
+inline constexpr unsigned char kIconPng[] = {${REMBOARD_ICON_PNG_ARRAY}};
+inline constexpr std::size_t kIconPngLen = ${REMBOARD_ICON_PNG_LEN};
+")
 
 add_executable(remboard
   src/main.cpp
