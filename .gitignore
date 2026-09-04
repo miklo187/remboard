@@ -1,0 +1,11 @@
+build/
+build-*/
+*.o
+compile_commands.json
+.cache/
+
+# Android
+app-android/local.properties
+app-android/.gradle/
+app-android/**/build/
+.cxx/

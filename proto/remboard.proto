@@ -1,0 +1,96 @@
+syntax = "proto3";
+package remboard.v1;
+
+message DeviceId {
+  string device_uuid = 1;
+  bytes curve_pubkey = 2;   // 32-byte raw Curve25519 public key
+  string display_name = 3;
+  string platform = 4;      // "linux" | "android"
+}
+
+message Envelope {
+  DeviceId sender = 1;
+  string envelope_id = 2;   // UUID, for ack/idempotency correlation
+  int64 sent_at_unix_ms = 3;
+
+  oneof payload {
+    PairRequest pair_request = 10;
+    PairResponse pair_response = 11;
+    TextShare text_share = 20;
+    ClipboardText clipboard_text = 21;
+    FileStart file_start = 30;
+    FileChunk file_chunk = 31;
+    FileEnd file_end = 32;
+    Ack ack = 40;
+    Reject reject = 41;
+    Status status = 42;
+  }
+}
+
+message PairRequest {
+  string qr_nonce = 1;
+  DeviceId requester = 2;
+  string fingerprint = 3;
+  // Requester's own best-guess LAN address, so the responder (who has no
+  // other channel to learn it -- ZMQ connection metadata is not relied
+  // upon) can store it as the paired device's last_known_ip/port.
+  string requester_ip = 4;
+  int32 requester_port = 5;
+}
+
+message PairResponse {
+  bool accepted = 1;
+  DeviceId responder = 2;
+  string fingerprint = 3;
+}
+
+message TextShare {
+  string text = 1;
+  string source_app = 2;
+}
+
+message ClipboardText {
+  string text = 1;
+}
+
+message FileStart {
+  string transfer_id = 1;
+  string file_name = 2;
+  int64 total_size_bytes = 3;
+  string mime_type = 4;
+  int32 total_chunks = 5;
+  int32 chunk_size_bytes = 6;
+}
+
+message FileChunk {
+  string transfer_id = 1;
+  int32 index = 2;
+  bytes data = 3;
+}
+
+message FileEnd {
+  string transfer_id = 1;
+  string sha256_checksum = 2;
+}
+
+message Ack {
+  string ack_envelope_id = 1;
+}
+
+message Reject {
+  string reject_envelope_id = 1;
+  string reason = 2;   // "user_rejected" | "untrusted_device" | "checksum_mismatch"
+}
+
+message Status {
+  enum Kind {
+    UNKNOWN = 0;
+    TRANSFER_PROGRESS = 1;
+    PEER_ONLINE = 2;
+    PEER_OFFLINE = 3;
+  }
+  Kind kind = 1;
+  string transfer_id = 2;
+  int32 chunks_received = 3;
+  int32 total_chunks = 4;
+}

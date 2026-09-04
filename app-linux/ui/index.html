@@ -1,0 +1,88 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>remboard</title>
+<style>/*__STYLE_CSS__*/</style>
+</head>
+<body>
+
+<header>
+  <h1>remboard</h1>
+  <span id="selfInfo"></span>
+</header>
+
+<main>
+  <div class="left">
+    <section class="panel">
+      <h2>Send</h2>
+      <textarea id="composeText" placeholder="Paste or type text to send&hellip;"></textarea>
+      <div class="row">
+        <select id="composeDevice"></select>
+        <span class="spacer"></span>
+        <button id="sendFileBtn">Send File&hellip;</button>
+        <button id="sendTextBtn" class="primary">Send</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Inbox</h2>
+      <div id="inboxList"><div class="empty">Nothing received yet.</div></div>
+    </section>
+  </div>
+
+  <div class="right">
+    <section class="panel">
+      <h2>Devices</h2>
+      <div id="deviceList"><div class="empty">No paired devices.</div></div>
+      <div class="row">
+        <button id="addDeviceBtn" class="primary" style="width:100%">+ Add Device</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="modal-backdrop" id="addDeviceModal" hidden>
+  <div class="modal">
+    <h2>Pair a New Device</h2>
+    <p style="color:var(--muted);font-size:13px;margin-top:-6px">
+      On your phone, open remboard and choose &ldquo;Scan QR&rdquo;, or share
+      something to remboard and follow the prompt to pair.
+    </p>
+    <div id="qrContainer"></div>
+    <details class="manual-pair">
+      <summary>Pairing another remboard app on this PC (dev/testing)?</summary>
+      <p>Paste the QR JSON shown by the other instance here:</p>
+      <textarea id="manualPairInput" placeholder='{"v":1,"device_uuid":...}'></textarea>
+      <div class="row">
+        <span class="spacer"></span>
+        <button id="manualPairBtn">Pair</button>
+      </div>
+    </details>
+    <div class="row">
+      <span class="spacer"></span>
+      <button id="closeAddDeviceBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="pairingRequestModal" hidden>
+  <div class="modal">
+    <h2>Pairing Request</h2>
+    <p id="pairingRequestName" style="font-size:15px"></p>
+    <p class="fingerprint" id="pairingRequestFingerprint"></p>
+    <p style="color:var(--muted);font-size:13px">
+      Confirm this matches what's shown on the other device before accepting.
+    </p>
+    <div class="row">
+      <button id="rejectPairingBtn" class="danger">Reject</button>
+      <span class="spacer"></span>
+      <button id="acceptPairingBtn" class="primary">Accept</button>
+    </div>
+  </div>
+</div>
+
+<script>/*__QRCODE_JS__*/</script>
+<script>/*__APP_JS__*/</script>
+</body>
+</html>

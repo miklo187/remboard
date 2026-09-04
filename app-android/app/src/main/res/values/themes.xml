@@ -1,0 +1,5 @@
+<resources>
+    <style name="Theme.Remboard" parent="Theme.Material3.DayNight.NoActionBar" />
+
+    <style name="Theme.Remboard.Dialog" parent="Theme.Material3.DayNight.Dialog" />
+</resources>

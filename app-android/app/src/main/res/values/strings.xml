@@ -1,0 +1,22 @@
+<resources>
+    <string name="app_name">remboard</string>
+    <string name="notification_channel_connection">remboard connection</string>
+    <string name="notification_channel_items">Received items</string>
+    <string name="notification_connected_title">remboard</string>
+    <string name="notification_connected_text_none">No PC paired yet — tap to pair</string>
+    <string name="notification_connected_text_one">Paired with %1$s — tap to open</string>
+    <string name="notification_connected_text_many">Paired with %1$d PCs — tap to open</string>
+    <string name="action_copy">Copy</string>
+    <string name="action_save">Save</string>
+    <string name="action_reject">Reject</string>
+    <string name="action_remove">Remove</string>
+    <string name="pair_scan_qr">Scan QR on PC</string>
+    <string name="share_pairing_required">Pair with a PC first to share to remboard.</string>
+    <string name="share_tap_hint">Tap a device below to send</string>
+    <string name="send_title">Send</string>
+    <string name="send_device_hint">Send to</string>
+    <string name="send_text_hint">Text to send</string>
+    <string name="send_text_button">Send Text</string>
+    <string name="send_file_button">Send File…</string>
+    <string name="send_no_devices">Pair a PC first to send from here.</string>
+</resources>
