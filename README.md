@@ -2,9 +2,12 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Linux-blue)](#project-layout)
+[![Windows](https://img.shields.io/badge/Windows-planned-lightgrey)](https://github.com/miklo187/remboard/issues/1)
 [![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-blueviolet)](#ai-assisted-development)
 
 Send text and files between your phone and PC over the local network — end-to-end encrypted, no cloud, no account.
+
+> **Windows support is planned** — the shared C++ core is already portable; what's missing is a Windows secret store, mDNS discovery backend, and a WebView2-based desktop client. Tracked in [#1](https://github.com/miklo187/remboard/issues/1).
 
 ## Features
 
