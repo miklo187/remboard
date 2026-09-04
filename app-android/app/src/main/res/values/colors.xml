@@ -5,4 +5,9 @@
     <color name="remboard_on_primary">#FFFFFF</color>
     <color name="remboard_primary_container">#DCE6FF</color>
     <color name="remboard_on_primary_container">#001B43</color>
+
+    <!-- Launcher icon background. Deliberately not theme-varying (no
+         values-night override): the app icon should look the same
+         regardless of system dark/light mode. -->
+    <color name="ic_launcher_background">#2563EB</color>
 </resources>
