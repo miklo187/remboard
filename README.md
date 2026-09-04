@@ -36,6 +36,16 @@ Both apps share the same C++ core (`core/`), which owns the transport, pairing, 
 
 Pairing: the PC shows a QR code containing its Curve25519 public key, IP, and port. The phone scans it to establish trust out of band — device keys are never trusted blindly over the network. Once paired, devices discover each other locally over mDNS and exchange messages over a CURVE-encrypted ZeroMQ ROUTER/DEALER connection; unpaired peers are rejected via ZAP.
 
+## Network / firewall
+
+remboard listens on **TCP 49321** for CurveZMQ connections from paired devices (override on Linux with `--port`; see `core/include/remboard/core.h`). Device discovery uses standard mDNS (**UDP 5353**) via Avahi/NSD.
+
+If your firewall blocks inbound connections by default (common on desktop Linux), allow TCP 49321 for the `remboard` binary so paired devices can reach it — e.g. with `ufw`:
+
+```sh
+sudo ufw allow 49321/tcp
+```
+
 ## Building
 
 ### Linux desktop app
