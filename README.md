@@ -68,6 +68,14 @@ cmake --build build
 ./build/app-linux/remboard
 ```
 
+Running the binary straight out of the build directory works fine, but desktop shells that resolve app icons via installed `.desktop` files (GNOME Shell among them) will show a generic icon for it rather than remboard's own — install it to get a proper taskbar/dash icon and app-menu entry:
+
+```sh
+cmake --install build --prefix ~/.local   # installs to ~/.local/bin, no sudo needed
+```
+
+(Requires `~/.local/bin` on `PATH`, which most distros set up by default.)
+
 ### Android app
 
 Requires the Android SDK/NDK (see `app-android/local.properties.example`).

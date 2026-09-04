@@ -62,3 +62,15 @@ target_link_libraries(remboard PRIVATE
   PkgConfig::GTK3)
 
 target_compile_features(remboard PRIVATE cxx_std_23)
+
+# `cmake --install` registers the app with the desktop shell (icon in the
+# taskbar/dash, entry in the app menu). Shells that resolve icons via
+# installed .desktop files (e.g. GNOME Shell) won't show one for the raw
+# binary run out of the build directory -- see remboard.desktop.
+include(GNUInstallDirs)
+install(TARGETS remboard RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/icon.png"
+  DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/192x192/apps"
+  RENAME remboard.png)
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/remboard.desktop"
+  DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")

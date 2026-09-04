@@ -61,6 +61,12 @@ std::optional<std::string> arg_value(const std::vector<std::string>& args,
 }  // namespace
 
 int main(int argc, char** argv) {
+  // Sets WM_CLASS to "remboard" regardless of how the binary was invoked,
+  // matching StartupWMClass in remboard.desktop -- GNOME Shell's taskbar
+  // and Activities overview key off this (not the window's own icon hint)
+  // to look up the app's icon.
+  g_set_prgname("remboard");
+
   std::vector<std::string> args(argv + 1, argv + argc);
 
   try {

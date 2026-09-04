@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=remboard
+Comment=Encrypted phone-PC clipboard and file sync
+Exec=remboard
+Icon=remboard
+Terminal=false
+Categories=Utility;Network;
+StartupWMClass=remboard
