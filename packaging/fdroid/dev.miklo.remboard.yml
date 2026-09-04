@@ -1,17 +1,3 @@
-# Draft F-Droid metadata for remboard, to be copied into fdroiddata's
-# metadata/ directory (as dev.miklo.remboard.yml) when submitting a merge
-# request there: https://gitlab.com/fdroid/fdroiddata
-#
-# The two build-portability blockers this needed are resolved as of
-# v0.1.1: libsodium, libzmq, protobuf (and its transitive abseil-cpp
-# dependency), cppzmq, and nlohmann_json are all vendored as git
-# submodules under third_party/ instead of being fetched over the network
-# mid-build (core/CMakeLists.txt prefers the local submodule when present,
-# falling back to the network fetch otherwise -- see its comments), and
-# the build no longer hardcodes a host-specific protoc path. Verified with
-# a full clean rebuild that no network fetches happen for those five
-# dependencies.
-
 Categories:
   - Connectivity
 License: MIT
@@ -21,27 +7,24 @@ IssueTracker: https://github.com/miklo187/remboard/issues
 Changelog: https://github.com/miklo187/remboard/releases
 
 AutoName: remboard
-Summary: Encrypted phone-PC clipboard and file sync over the local network
-Description: |
-    Send text and files between your phone and PC over the local network,
-    end-to-end encrypted with CurveZMQ (Curve25519), with no cloud service
-    and no account. Pair with a PC by scanning a QR code; once paired,
-    devices find each other automatically over mDNS.
 
 RepoType: git
 Repo: https://github.com/miklo187/remboard.git
+Binaries: https://github.com/miklo187/remboard/releases/download/v%v/remboard-%v.apk
 
 Builds:
-  - versionName: '0.1.1'
-    versionCode: 2
-    commit: v0.1.1
+  - versionName: '0.1.2'
+    versionCode: 3
+    commit: 67144e68407a91b4ca6e0af470d0ed070d0eaa10
     subdir: app-android
     submodules: yes
     gradle:
       - yes
     ndk: 28.2.13676358
 
+AllowedAPKSigningKeys: 289a9ec0159f06671579044ea03516ec8e1787946f7330aac40605c521b84ac1
+
 AutoUpdateMode: Version %v
 UpdateCheckMode: Tags
-CurrentVersion: '0.1.1'
-CurrentVersionCode: 2
+CurrentVersion: '0.1.2'
+CurrentVersionCode: 3
