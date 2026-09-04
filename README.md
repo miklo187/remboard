@@ -1,5 +1,8 @@
 # remboard
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Linux-blue)](#project-layout)
+
 Send text and files between your phone and PC over the local network — end-to-end encrypted, no cloud, no account.
 
 ## Features
