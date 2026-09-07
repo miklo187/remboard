@@ -1,8 +1,14 @@
 #include "remboard/core.h"
 
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <iphlpapi.h>
+#else
 #include <arpa/inet.h>
 #include <ifaddrs.h>
 #include <net/if.h>
+#endif
 #include <sodium.h>
 
 #include <chrono>
@@ -30,6 +36,61 @@ int64_t now_unix_ms() {
       .count();
 }
 
+#ifdef _WIN32
+// Windows has no getifaddrs(); GetAdaptersAddresses is the native
+// equivalent for enumerating this machine's IPv4 interfaces.
+std::string detect_local_ip() {
+  IP_ADAPTER_ADDRESSES* adapter_address = nullptr;
+  ULONG address_size = 15000;
+  ULONG ret;
+  unsigned int num_retries = 4;
+  do {
+    adapter_address = static_cast<IP_ADAPTER_ADDRESSES*>(malloc(address_size));
+    ret = GetAdaptersAddresses(AF_INET, GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_ANYCAST, nullptr,
+                                adapter_address, &address_size);
+    if (ret == ERROR_BUFFER_OVERFLOW) {
+      free(adapter_address);
+      adapter_address = nullptr;
+      address_size *= 2;
+    } else {
+      break;
+    }
+  } while (num_retries-- > 0);
+
+  // Adapters with no default gateway (Hyper-V/WSL/Docker virtual switches,
+  // in particular) aren't reachable from another device on the LAN even
+  // though GetAdaptersAddresses happily hands back their IPv4 address; skip
+  // those on a first pass and only fall back to them if nothing routable
+  // was found at all.
+  std::string routable_result;
+  std::string fallback_result;
+  if (adapter_address != nullptr && ret == NO_ERROR) {
+    for (PIP_ADAPTER_ADDRESSES adapter = adapter_address; adapter != nullptr;
+         adapter = adapter->Next) {
+      if (adapter->OperStatus != IfOperStatusUp) continue;
+      bool has_gateway = adapter->FirstGatewayAddress != nullptr;
+      for (IP_ADAPTER_UNICAST_ADDRESS* unicast = adapter->FirstUnicastAddress;
+           unicast != nullptr; unicast = unicast->Next) {
+        if (unicast->Address.lpSockaddr->sa_family != AF_INET) continue;
+        auto* addr_in =
+            reinterpret_cast<struct sockaddr_in*>(unicast->Address.lpSockaddr);
+        char buf[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &addr_in->sin_addr, buf, sizeof(buf));
+        std::string ip(buf);
+        if (ip.rfind("127.", 0) == 0 || ip.rfind("169.254.", 0) == 0)
+          continue;  // loopback / link-local
+        if (fallback_result.empty()) fallback_result = ip;
+        if (has_gateway && routable_result.empty()) routable_result = ip;
+        break;
+      }
+      if (!routable_result.empty()) break;
+    }
+  }
+  free(adapter_address);
+  std::string result = !routable_result.empty() ? routable_result : fallback_result;
+  return result.empty() ? "127.0.0.1" : result;
+}
+#else
 std::string detect_local_ip() {
   struct ifaddrs* ifaddr = nullptr;
   if (getifaddrs(&ifaddr) != 0) return "127.0.0.1";
@@ -51,6 +112,7 @@ std::string detect_local_ip() {
   freeifaddrs(ifaddr);
   return result.empty() ? "127.0.0.1" : result;
 }
+#endif
 
 constexpr int64_t kPairingTtlMs = 120'000;
 

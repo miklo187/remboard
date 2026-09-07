@@ -16,3 +16,6 @@
 [submodule "third_party/abseil-cpp"]
 	path = third_party/abseil-cpp
 	url = https://github.com/abseil/abseil-cpp
+[submodule "third_party/mdns"]
+	path = third_party/mdns
+	url = https://github.com/mjansson/mdns

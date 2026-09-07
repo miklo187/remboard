@@ -162,7 +162,7 @@ if(NOT TARGET remboard_proto)
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../proto ${CMAKE_CURRENT_BINARY_DIR}/proto_build)
 endif()
 
-if(NOT ANDROID)
+if(NOT ANDROID AND NOT WIN32)
   pkg_check_modules(AVAHI REQUIRED IMPORTED_TARGET avahi-client)
 endif()
 
@@ -222,7 +222,15 @@ else()
   target_link_libraries(remboard_core PRIVATE cppzmq PkgConfig::ZMQ PkgConfig::SODIUM)
 endif()
 
-if(NOT ANDROID)
+if(WIN32)
+  # No Avahi/Bonjour equivalent ships with Windows; discovery_mdns.cpp is a
+  # self-contained mDNS responder/browser built on the vendored header-only
+  # mjansson/mdns library instead (see third_party/mdns).
+  target_sources(remboard_core PRIVATE src/discovery/discovery_mdns.cpp)
+  target_include_directories(remboard_core PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../third_party/mdns")
+  target_link_libraries(remboard_core PRIVATE ws2_32 iphlpapi)
+elseif(NOT ANDROID)
   target_sources(remboard_core PRIVATE src/discovery/discovery_avahi.cpp)
   target_link_libraries(remboard_core PRIVATE PkgConfig::AVAHI)
 else()

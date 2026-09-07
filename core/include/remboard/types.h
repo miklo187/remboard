@@ -9,7 +9,7 @@ namespace remboard {
 
 using PubKey = std::vector<uint8_t>;  // 32 raw Curve25519 bytes
 
-enum class Platform { kUnknown, kLinux, kAndroid };
+enum class Platform { kUnknown, kLinux, kAndroid, kWindows };
 
 std::string to_string(Platform platform);
 Platform platform_from_string(const std::string& s);

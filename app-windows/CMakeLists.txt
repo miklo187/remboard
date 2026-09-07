@@ -1,25 +1,30 @@
-# Linux desktop app: a webview-based single self-contained executable,
-# following the same convention used by this developer's other webview
-# apps (see ~/dev/apps/sysview) -- FetchContent the webview library and
+# Windows desktop app: a webview-based single self-contained executable,
+# mirroring app-linux/CMakeLists.txt (FetchContent the webview library and
 # embed ui/index.html into the binary at build time via configure_file, so
-# there are no runtime assets to locate.
+# there are no runtime assets to locate) but targeting the Win32/WebView2
+# backend via MSYS2 UCRT64 (MinGW-w64) instead of GTK3/WebKitGTK.
 
 include(FetchContent)
+
+# webview's own CMake defaults WEBVIEW_USE_COMPAT_MINGW to its
+# "is this the top-level CMake project" check, which is false once
+# FetchContent'd as a subdirectory here -- force it on so MinGW gets the
+# WebView2 COM interface shims it needs (MinGW's own headers lag MSVC's).
+set(WEBVIEW_USE_COMPAT_MINGW ON CACHE BOOL "" FORCE)
+
 FetchContent_Declare(
   webview
   GIT_REPOSITORY https://github.com/webview/webview
   GIT_TAG 0.12.0)
 FetchContent_MakeAvailable(webview)
 
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(GTK3 REQUIRED IMPORTED_TARGET gtk+-3.0)
+# ui/ and assets/ live at the repo root, shared with app-linux.
+set(REMBOARD_UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ui")
+set(REMBOARD_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets")
 
 # index.html is the template; style.css/app.js/qrcode.min.js are kept as
 # separate files for readability and get inlined into it here, so the
 # shipped binary still ends up with a single self-contained page.
-# ui/ and assets/ live at the repo root, shared with app-windows.
-set(REMBOARD_UI_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../ui")
-set(REMBOARD_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../assets")
 file(READ "${REMBOARD_UI_DIR}/index.html" INDEX_HTML_CONTENT)
 file(READ "${REMBOARD_UI_DIR}/style.css" STYLE_CSS_CONTENT)
 file(READ "${REMBOARD_UI_DIR}/app.js" APP_JS_CONTENT)
@@ -53,6 +58,9 @@ inline constexpr unsigned char kIconPng[] = {${REMBOARD_ICON_PNG_ARRAY}};
 inline constexpr std::size_t kIconPngLen = ${REMBOARD_ICON_PNG_LEN};
 ")
 
+# Kept as a console-subsystem executable for now so stderr diagnostics are
+# visible while getting the Windows port working; switch to WIN32 (no
+# console window) once it's stable.
 add_executable(remboard
   src/main.cpp
   src/bridge.cpp
@@ -62,18 +70,12 @@ target_include_directories(remboard PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generat
 target_link_libraries(remboard PRIVATE
   webview::core
   remboard_core
-  PkgConfig::GTK3)
+  gdiplus)
 
 target_compile_features(remboard PRIVATE cxx_std_23)
 
-# `cmake --install` registers the app with the desktop shell (icon in the
-# taskbar/dash, entry in the app menu). Shells that resolve icons via
-# installed .desktop files (e.g. GNOME Shell) won't show one for the raw
-# binary run out of the build directory -- see remboard.desktop.
-include(GNUInstallDirs)
-install(TARGETS remboard RUNTIME DESTINATION "${CMAKE_INSTALL_BINDIR}")
-install(FILES "${REMBOARD_ASSETS_DIR}/icon.png"
-  DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/192x192/apps"
-  RENAME remboard.png)
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/remboard.desktop"
-  DESTINATION "${CMAKE_INSTALL_DATADIR}/applications")
+# Portable-folder distribution (see plan): statically link the MinGW C/C++
+# runtime so libgcc/libstdc++ DLLs don't need to be shipped; the remaining
+# MSYS2-packaged shared libs (zeromq/sodium/protobuf/abseil/winpthread) do
+# still need to sit next to remboard.exe -- check with `ldd` after building.
+target_link_options(remboard PRIVATE -static-libgcc -static-libstdc++)

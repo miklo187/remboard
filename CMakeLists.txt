@@ -10,6 +10,10 @@ enable_testing()
 add_subdirectory(proto)
 add_subdirectory(core)
 
-if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/app-linux/CMakeLists.txt)
+if(NOT WIN32 AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/app-linux/CMakeLists.txt)
   add_subdirectory(app-linux)
+endif()
+
+if(WIN32 AND EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/app-windows/CMakeLists.txt)
+  add_subdirectory(app-windows)
 endif()
