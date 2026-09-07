@@ -1,13 +1,10 @@
 # remboard
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Linux-blue)](#project-layout)
-[![Windows](https://img.shields.io/badge/Windows-planned-lightgrey)](https://github.com/miklo187/remboard/issues/1)
+[![Platform](https://img.shields.io/badge/platform-Android%20%7C%20Linux%20%7C%20Windows-blue)](#project-layout)
 [![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-blueviolet)](#ai-assisted-development)
 
 Send text and files between your phone and PC over the local network — end-to-end encrypted, no cloud, no account.
-
-> **Windows support is planned** — the shared C++ core is already portable; what's missing is a Windows secret store, mDNS discovery backend, and a WebView2-based desktop client. Tracked in [#1](https://github.com/miklo187/remboard/issues/1).
 
 ## Features
 
@@ -29,34 +26,41 @@ Send text and files between your phone and PC over the local network — end-to-
 ## How it works
 
 ```
-   phone (Android)                      PC (Linux)
-  ┌─────────────────┐                 ┌─────────────────┐
-  │  app-android/    │  CurveZMQ/TCP   │  app-linux/      │
-  │  (Kotlin + JNI)  │◄───────────────►│  (webview UI)    │
-  └────────┬─────────┘   (encrypted)   └────────┬─────────┘
-           │                                     │
-           └──────────────┬──────────────────────┘
-                           │
-                    core/ (C++23)
-              ZeroMQ transport, pairing,
-              device registry, file chunking
-                           │
-                     proto/remboard.proto
-                    (message definitions)
+   phone (Android)                    PC (Linux / Windows)
+  ┌─────────────────┐                 ┌───────────────────────┐
+  │  app-android/    │  CurveZMQ/TCP   │  app-linux/            │
+  │  (Kotlin + JNI)  │◄───────────────►│  app-windows/          │
+  └────────┬─────────┘   (encrypted)   │  (webview UI)          │
+           │                           └───────────┬────────────┘
+           │                                        │
+           └──────────────────┬─────────────────────┘
+                               │
+                        core/ (C++23)
+                  ZeroMQ transport, pairing,
+                  device registry, file chunking
+                               │
+                         proto/remboard.proto
+                        (message definitions)
 ```
 
-Both apps share the same C++ core (`core/`), which owns the transport, pairing, and device state; each platform only implements its own UI and OS glue (`app-android/`, `app-linux/`).
+All three apps share the same C++ core (`core/`), which owns the transport, pairing, and device state; each platform only implements its own UI and OS glue (`app-android/`, `app-linux/`, `app-windows/`).
 
 Pairing: the PC shows a QR code containing its Curve25519 public key, IP, and port. The phone scans it to establish trust out of band — device keys are never trusted blindly over the network. Once paired, devices discover each other locally over mDNS and exchange messages over a CURVE-encrypted ZeroMQ ROUTER/DEALER connection; unpaired peers are rejected via ZAP.
 
 ## Network / firewall
 
-remboard listens on **TCP 49321** for CurveZMQ connections from paired devices (override on Linux with `--port`; see `core/include/remboard/core.h`). Device discovery uses standard mDNS (**UDP 5353**) via Avahi/NSD.
+remboard listens on **TCP 49321** for CurveZMQ connections from paired devices (override with `--port`; see `core/include/remboard/core.h`). Device discovery uses standard mDNS (**UDP 5353**) — via Avahi on Linux, NSD on Android, and a self-contained mDNS responder/browser on Windows (no Bonjour or other runtime install needed).
 
 If your firewall blocks inbound connections by default (common on desktop Linux), allow TCP 49321 for the `remboard` binary so paired devices can reach it — e.g. with `ufw`:
 
 ```sh
 sudo ufw allow 49321/tcp
+```
+
+On Windows, allow `remboard.exe` when prompted by Windows Defender Firewall on first run (or add it yourself if the prompt doesn't appear):
+
+```powershell
+New-NetFirewallRule -DisplayName "remboard" -Direction Inbound -Program "C:\path\to\remboard.exe" -Action Allow
 ```
 
 ## Building
@@ -78,6 +82,26 @@ cmake --install build --prefix ~/.local   # installs to ~/.local/bin, no sudo ne
 ```
 
 (Requires `~/.local/bin` on `PATH`, which most distros set up by default.)
+
+### Windows desktop app
+
+Download the portable build from [Releases](https://github.com/miklo187/remboard/releases) — unzip and run `remboard.exe`, no installer. Or build from source with [MSYS2](https://www.msys2.org/)'s UCRT64 environment:
+
+```sh
+pacman -S mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja \
+          mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-pkgconf \
+          mingw-w64-ucrt-x86_64-zeromq mingw-w64-ucrt-x86_64-cppzmq \
+          mingw-w64-ucrt-x86_64-libsodium mingw-w64-ucrt-x86_64-protobuf \
+          mingw-w64-ucrt-x86_64-abseil-cpp mingw-w64-ucrt-x86_64-nlohmann-json
+
+cmake -B build -G Ninja \
+  -DCMAKE_C_COMPILER=/ucrt64/bin/gcc.exe \
+  -DCMAKE_CXX_COMPILER=/ucrt64/bin/g++.exe
+cmake --build build
+./build/app-windows/remboard.exe
+```
+
+`app-windows/CMakeLists.txt` fetches the [webview](https://github.com/webview/webview) library itself (WebView2 backend — the runtime ships with Windows 10/11 via Edge). To hand the built exe to another machine without MSYS2 installed, copy `remboard.exe` and its resolved MSYS2 DLLs alongside it (`ldd build/app-windows/remboard.exe` lists them) — that's exactly what the zip in Releases contains.
 
 ### Android app
 
@@ -107,6 +131,8 @@ ctest --test-dir build
 | `proto/` | Protobuf message definitions shared by all platforms |
 | `app-android/` | Android app (Kotlin, JNI bridge into `core/`) |
 | `app-linux/` | Linux desktop app (webview-based UI over the C++ core) |
+| `app-windows/` | Windows desktop app (webview/WebView2-based UI over the C++ core) |
+| `ui/` | Shared desktop frontend (HTML/CSS/JS), used by both `app-linux/` and `app-windows/` |
 
 ## AI-assisted development
 
