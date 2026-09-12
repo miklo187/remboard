@@ -58,10 +58,9 @@ inline constexpr unsigned char kIconPng[] = {${REMBOARD_ICON_PNG_ARRAY}};
 inline constexpr std::size_t kIconPngLen = ${REMBOARD_ICON_PNG_LEN};
 ")
 
-# Kept as a console-subsystem executable for now so stderr diagnostics are
-# visible while getting the Windows port working; switch to WIN32 (no
-# console window) once it's stable.
-add_executable(remboard
+# WIN32 (no console window); fatal startup errors are reported via
+# MessageBox instead of stderr since there's no console to see it on.
+add_executable(remboard WIN32
   src/main.cpp
   src/bridge.cpp
   src/file_secret_store.cpp)

@@ -8,7 +8,6 @@
 #include <webview/webview.h>
 
 #include <cstdlib>
-#include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -108,10 +107,10 @@ int main(int argc, char** argv) {
 
     core->shutdown();
   } catch (const webview::exception& e) {
-    std::cerr << e.what() << '\n';
+    MessageBoxA(nullptr, e.what(), "remboard", MB_OK | MB_ICONERROR);
     return 1;
   } catch (const std::exception& e) {
-    std::cerr << "remboard: " << e.what() << '\n';
+    MessageBoxA(nullptr, e.what(), "remboard", MB_OK | MB_ICONERROR);
     return 1;
   }
 
