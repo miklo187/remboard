@@ -32,6 +32,10 @@ Builds:
 AllowedAPKSigningKeys: 289a9ec0159f06671579044ea03516ec8e1787946f7330aac40605c521b84ac1
 
 AutoUpdateMode: Version
-UpdateCheckMode: Tags
+# Only match plain "vX.Y.Z" tags (the Android release scheme) -- non-Android
+# releases (e.g. the Windows desktop app) use a "windows-vX.Y.Z" prefix
+# precisely so they're excluded here and don't get mistaken for Android
+# version bumps.
+UpdateCheckMode: Tags ^v[0-9]+\.[0-9]+\.[0-9]+$
 CurrentVersion: 0.1.2
 CurrentVersionCode: 3
