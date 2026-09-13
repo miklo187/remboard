@@ -23,6 +23,7 @@ object RemboardNative {
     external fun selfInfo(): String
     external fun listDevices(): String
     external fun removeDevice(deviceUuid: String)
+    external fun listReceivedItems(): String
 
     external fun requestPairing(qrPayloadJson: String): String
 

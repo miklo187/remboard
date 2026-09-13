@@ -67,6 +67,7 @@ class MainActivity : AppCompatActivity(), RemboardNative.Listener {
             CoreReady.await()
             loadSelfInfo()
             refreshDevices()
+            refreshInbox()
         }
     }
 
@@ -74,7 +75,10 @@ class MainActivity : AppCompatActivity(), RemboardNative.Listener {
         super.onResume()
         RemboardNative.addListener(this)
         if (RemboardForegroundService.isCoreReady) {
-            lifecycleScope.launch { refreshDevices() }
+            lifecycleScope.launch {
+                refreshDevices()
+                refreshInbox()
+            }
         }
     }
 
@@ -100,6 +104,17 @@ class MainActivity : AppCompatActivity(), RemboardNative.Listener {
     private suspend fun refreshDevices() {
         val devices = withContext(Dispatchers.IO) { JSONArray(RemboardNative.listDevices()) }
         renderDevices(devices)
+    }
+
+    // Backfills the inbox from native's pending-items store (source of
+    // truth), so items that arrived while this Activity wasn't listening --
+    // e.g. the app was backgrounded and only the foreground service's
+    // notification fired -- still show up once the user opens the app.
+    private suspend fun refreshInbox() {
+        val items = withContext(Dispatchers.IO) { JSONArray(RemboardNative.listReceivedItems()) }
+        inboxItems.clear()
+        for (i in 0 until items.length()) inboxItems.add(items.getJSONObject(i))
+        renderInbox()
     }
 
     private fun renderDevices(devices: JSONArray) {

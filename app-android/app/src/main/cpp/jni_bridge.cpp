@@ -291,6 +291,16 @@ JNIEXPORT void JNICALL Java_dev_miklo_remboard_jni_RemboardNative_removeDevice(
 }
 
 JNIEXPORT jstring JNICALL
+Java_dev_miklo_remboard_jni_RemboardNative_listReceivedItems(JNIEnv* env,
+                                                               jobject) {
+  if (!g_core) return to_jstring(env, "[]");
+  nlohmann::json arr = nlohmann::json::array();
+  for (const auto& item : g_core->list_received_items())
+    arr.push_back(item_to_json(item));
+  return to_jstring(env, arr.dump());
+}
+
+JNIEXPORT jstring JNICALL
 Java_dev_miklo_remboard_jni_RemboardNative_requestPairing(
     JNIEnv* env, jobject, jstring qr_payload_json) {
   if (!g_core)

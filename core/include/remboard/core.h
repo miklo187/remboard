@@ -68,6 +68,12 @@ class Core {
   virtual std::vector<DeviceInfo> list_paired_devices() = 0;
   virtual void remove_device(const std::string& device_uuid) = 0;
 
+  // Items delivered via set_on_incoming_item but not yet acted on (still
+  // pending in the inbox). Lets a UI that wasn't listening at delivery time
+  // (e.g. an Activity that was backgrounded when the item arrived) backfill
+  // its inbox on resume instead of missing the item entirely.
+  virtual std::vector<IncomingItem> list_received_items() = 0;
+
   // Acts on a previously delivered IncomingItem (copy is a UI-local no-op
   // signal for symmetry; save persists file_path to a permanent location;
   // reject sends a Reject envelope back to the sender and discards staged

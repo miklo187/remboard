@@ -11,6 +11,7 @@
 #endif
 #include <sodium.h>
 
+#include <algorithm>
 #include <chrono>
 #include <filesystem>
 #include <mutex>
@@ -368,6 +369,18 @@ class CoreImpl : public Core {
 
   void remove_device(const std::string& device_uuid) override {
     device_store_.remove(device_uuid);
+  }
+
+  std::vector<IncomingItem> list_received_items() override {
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    std::vector<IncomingItem> items;
+    items.reserve(received_items_.size());
+    for (const auto& [id, item] : received_items_) items.push_back(item);
+    std::sort(items.begin(), items.end(),
+              [](const IncomingItem& a, const IncomingItem& b) {
+                return a.received_at_unix_ms > b.received_at_unix_ms;
+              });
+    return items;
   }
 
   void act_on_item(const std::string& envelope_id, ItemAction action,
