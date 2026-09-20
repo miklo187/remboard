@@ -26,21 +26,21 @@ Send text and files between your phone and PC over the local network — end-to-
 ## How it works
 
 ```
-   phone (Android)                    PC (Linux / Windows)
-  ┌─────────────────┐                 ┌───────────────────────┐
+   phone (Android)                     PC (Linux / Windows)
+  ┌──────────────────┐                 ┌────────────────────────┐
   │  app-android/    │  CurveZMQ/TCP   │  app-linux/            │
   │  (Kotlin + JNI)  │◄───────────────►│  app-windows/          │
   └────────┬─────────┘   (encrypted)   │  (webview UI)          │
            │                           └───────────┬────────────┘
-           │                                        │
-           └──────────────────┬─────────────────────┘
-                               │
-                        core/ (C++23)
-                  ZeroMQ transport, pairing,
-                  device registry, file chunking
-                               │
-                         proto/remboard.proto
-                        (message definitions)
+           │                                       │
+           └──────────────────┬────────────────────┘
+                              │
+                         core/ (C++23)
+                   ZeroMQ transport, pairing,
+                   device registry, file chunking
+                              │
+                      proto/remboard.proto
+                      (message definitions)
 ```
 
 All three apps share the same C++ core (`core/`), which owns the transport, pairing, and device state; each platform only implements its own UI and OS glue (`app-android/`, `app-linux/`, `app-windows/`).
