@@ -385,6 +385,12 @@ class CoreImpl : public Core {
 
   void remove_device(const std::string& device_uuid) override {
     device_store_.remove(device_uuid);
+    // Otherwise a later re-pair under the same device_uuid finds a stale
+    // "already online" entry here, mark_peer_online() sees no change, and
+    // the live on_peer_status_changed_ push is skipped - the UI only
+    // catches up on the next manual list refresh.
+    std::lock_guard<std::mutex> lock(state_mutex_);
+    online_status_.erase(device_uuid);
   }
 
   std::vector<IncomingItem> list_received_items() override {
