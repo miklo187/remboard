@@ -117,6 +117,20 @@ std::string detect_local_ip() {
 
 constexpr int64_t kPairingTtlMs = 120'000;
 
+// Caps on an incoming file offer, enforced before any per-transfer memory or
+// disk state is allocated so a peer can't advertise e.g. total_chunks near
+// INT32_MAX and force a huge allocation.
+constexpr int64_t kMaxFileTransferBytes = 2LL * 1024 * 1024 * 1024;  // 2 GiB
+constexpr size_t kMaxConcurrentTransfers = 8;
+
+// Strips any directory components from a peer-supplied file name so it can
+// never be used to write outside the intended staging directory.
+std::string sanitize_file_name(const std::string& name) {
+  std::string base = std::filesystem::path(name).filename().string();
+  if (base.empty() || base == "." || base == "..") return "file";
+  return base;
+}
+
 }  // namespace
 
 class CoreImpl : public Core {
@@ -140,8 +154,10 @@ class CoreImpl : public Core {
   void start() override {
     transport_.set_on_message(
         [this](const std::string& sender_uuid, const std::string& peer_ip,
+               const std::vector<uint8_t>& sender_pubkey, bool via_router,
                const std::vector<uint8_t>& payload) {
-          on_transport_message(sender_uuid, peer_ip, payload);
+          on_transport_message(sender_uuid, peer_ip, sender_pubkey,
+                                via_router, payload);
         });
     transport_.start();
 
@@ -541,6 +557,8 @@ class CoreImpl : public Core {
 
   void on_transport_message(const std::string& sender_uuid,
                              const std::string& peer_ip,
+                             const std::vector<uint8_t>& sender_pubkey,
+                             bool via_router,
                              const std::vector<uint8_t>& payload) {
     remboard::v1::Envelope env;
     if (!env.ParseFromArray(payload.data(),
@@ -548,29 +566,58 @@ class CoreImpl : public Core {
       return;
     }
 
-    mark_peer_online(sender_uuid);
+    // Resolve the sender from the CURVE-authenticated public key. Never
+    // trust sender_uuid (the peer's self-set ZMQ routing id) or
+    // env.sender() (protobuf fields the peer fully controls) for identity.
+    std::optional<DeviceInfo> sender_dev;
+    if (auto uuid = device_store_.find_by_pubkey(sender_pubkey)) {
+      sender_dev = device_store_.find(*uuid);
+    }
+
+    if (!sender_dev) {
+      // An unpaired key may only take part in pairing - nothing else is
+      // processed, so a LAN peer can't ride pairing mode (which accepts
+      // any CURVE key at the ZAP layer) to inject text/file messages
+      // before the user approves anyone.
+      //
+      // A PairRequest must arrive via the shared ROUTER (someone
+      // connecting to us); handle_pair_request further gates it on the
+      // active pairing nonce/TTL. A PairResponse must arrive via a DEALER
+      // *we* opened to the exact pubkey scanned from the QR code - CURVE
+      // guarantees that connection is genuinely that peer even though
+      // they're not in device_store yet.
+      if (via_router &&
+          env.payload_case() == remboard::v1::Envelope::kPairRequest) {
+        handle_pair_request(env, sender_uuid, peer_ip);
+      } else if (!via_router && env.payload_case() ==
+                                     remboard::v1::Envelope::kPairResponse) {
+        handle_pair_response(env);
+      }
+      return;
+    }
+
+    mark_peer_online(sender_dev->device_uuid);
 
     bool should_ack = true;
     switch (env.payload_case()) {
       case remboard::v1::Envelope::kPairRequest:
-        handle_pair_request(env, sender_uuid, peer_ip);
-        should_ack = false;
+        should_ack = false;  // already paired; nothing to do
         break;
       case remboard::v1::Envelope::kPairResponse:
         handle_pair_response(env);
         should_ack = false;
         break;
       case remboard::v1::Envelope::kTextShare:
-        handle_text_share(env);
+        handle_text_share(env, *sender_dev);
         break;
       case remboard::v1::Envelope::kClipboardText:
-        handle_clipboard_text(env);
+        handle_clipboard_text(env, *sender_dev);
         break;
       case remboard::v1::Envelope::kFileStart:
-        handle_file_start(env);
+        handle_file_start(env, *sender_dev);
         break;
       case remboard::v1::Envelope::kFileChunk:
-        handle_file_chunk(env);
+        handle_file_chunk(env, *sender_dev);
         break;
       case remboard::v1::Envelope::kFileEnd:
         handle_file_end(env);
@@ -657,11 +704,12 @@ class CoreImpl : public Core {
     mark_peer_online(dev.device_uuid);
   }
 
-  void handle_text_share(const remboard::v1::Envelope& env) {
+  void handle_text_share(const remboard::v1::Envelope& env,
+                          const DeviceInfo& sender_dev) {
     IncomingItem item;
     item.envelope_id = env.envelope_id();
-    item.from_device_uuid = env.sender().device_uuid();
-    item.from_display_name = env.sender().display_name();
+    item.from_device_uuid = sender_dev.device_uuid;
+    item.from_display_name = sender_dev.display_name;
     item.kind = ItemKind::kText;
     item.received_at_unix_ms = now_unix_ms();
     item.text = env.text_share().text();
@@ -669,43 +717,69 @@ class CoreImpl : public Core {
     deliver_item(item);
   }
 
-  void handle_clipboard_text(const remboard::v1::Envelope& env) {
+  void handle_clipboard_text(const remboard::v1::Envelope& env,
+                              const DeviceInfo& sender_dev) {
     IncomingItem item;
     item.envelope_id = env.envelope_id();
-    item.from_device_uuid = env.sender().device_uuid();
-    item.from_display_name = env.sender().display_name();
+    item.from_device_uuid = sender_dev.device_uuid;
+    item.from_display_name = sender_dev.display_name;
     item.kind = ItemKind::kClipboardText;
     item.received_at_unix_ms = now_unix_ms();
     item.text = env.clipboard_text().text();
     deliver_item(item);
   }
 
-  void handle_file_start(const remboard::v1::Envelope& env) {
+  void handle_file_start(const remboard::v1::Envelope& env,
+                          const DeviceInfo& sender_dev) {
     namespace fs = std::filesystem;
     const auto& fs_msg = env.file_start();
+
+    // Reject anything that doesn't match what a legitimate sender always
+    // sends (send_file() always uses kChunkSizeBytes and derives
+    // total_chunks from total_size via the same formula) before touching
+    // any per-transfer state, so a malicious total_chunks/chunk_size can't
+    // be used to force a huge allocation.
+    if (fs_msg.chunk_size_bytes() != kChunkSizeBytes ||
+        fs_msg.total_size_bytes() <= 0 ||
+        fs_msg.total_size_bytes() > kMaxFileTransferBytes ||
+        fs_msg.total_chunks() !=
+            total_chunks_for_size(fs_msg.total_size_bytes(),
+                                   kChunkSizeBytes)) {
+      return;
+    }
+
     fs::path dir = fs::path(hooks_.data_dir) / "incoming";
     std::error_code ec;
     fs::create_directories(dir, ec);
-    fs::path dest = dir / (fs_msg.transfer_id() + "_" + fs_msg.file_name());
+    // The staging filename is generated locally and never derived from
+    // the wire-supplied transfer_id/file_name, so a malicious peer can't
+    // use path separators or ".." to write outside `dir`.
+    fs::path dest = dir / (generate_uuid_v4() + "_" +
+                            sanitize_file_name(fs_msg.file_name()));
 
     std::lock_guard<std::mutex> lock(state_mutex_);
+    if (file_transfers_.size() >= kMaxConcurrentTransfers) return;
+
     file_transfers_[fs_msg.transfer_id()] = std::make_unique<FileReceiveState>(
         fs_msg.transfer_id(), dest.string(), fs_msg.total_chunks(),
         fs_msg.chunk_size_bytes());
     FileTransferMeta meta;
-    meta.from_device_uuid = env.sender().device_uuid();
-    meta.from_display_name = env.sender().display_name();
+    meta.from_device_uuid = sender_dev.device_uuid;
+    meta.from_display_name = sender_dev.display_name;
     meta.file_name = fs_msg.file_name();
     meta.mime_type = fs_msg.mime_type();
     meta.total_size = fs_msg.total_size_bytes();
     file_transfer_meta_[fs_msg.transfer_id()] = meta;
   }
 
-  void handle_file_chunk(const remboard::v1::Envelope& env) {
+  void handle_file_chunk(const remboard::v1::Envelope& env,
+                          const DeviceInfo& sender_dev) {
     const auto& fc = env.file_chunk();
     std::lock_guard<std::mutex> lock(state_mutex_);
     auto it = file_transfers_.find(fc.transfer_id());
     if (it == file_transfers_.end()) return;  // unknown/expired transfer
+    if (fc.index() < 0 || fc.index() >= it->second->total_chunks())
+      return;  // out-of-range index; would otherwise throw out of write_chunk
     const std::string& data = fc.data();
     it->second->write_chunk(fc.index(),
                              std::vector<uint8_t>(data.begin(), data.end()));
@@ -713,7 +787,7 @@ class CoreImpl : public Core {
     if (on_transfer_progress_) {
       TransferProgress p;
       p.transfer_id = fc.transfer_id();
-      p.peer_device_uuid = env.sender().device_uuid();
+      p.peer_device_uuid = sender_dev.device_uuid;
       p.direction = TransferDirection::kIncoming;
       p.chunks_done = it->second->chunks_received();
       p.total_chunks = it->second->total_chunks();

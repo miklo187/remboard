@@ -3,6 +3,8 @@
 #include <chrono>
 #include <iostream>
 
+#include "identity/identity.h"
+
 namespace remboard {
 
 ZapHandler::ZapHandler(zmq::context_t& context, IsAllowedFn is_allowed)
@@ -67,6 +69,14 @@ void ZapHandler::run() {
           static_cast<const uint8_t*>(credentials.data()) +
               credentials.size());
       allowed = is_allowed_(pubkey);
+      // Forwarded by libzmq as the "User-Id" message metadata property on
+      // every frame subsequently received from this peer, so the ROUTER
+      // side can recover the CURVE-authenticated pubkey per-message rather
+      // than trusting the peer's self-set ZMQ routing id or any
+      // application-level field. Hex-encoded because ZAP/ZMTP metadata
+      // properties are NUL-terminated strings and a raw 32-byte key can
+      // contain NUL bytes.
+      if (allowed) user_id = to_hex(pubkey);
     }
 
     std::string status_code = allowed ? "200" : "400";

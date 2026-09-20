@@ -27,12 +27,25 @@ namespace remboard {
 // call them safely.
 class ZmqTransport {
  public:
-  // sender_device_uuid: the peer's routing id (== their device_uuid, since
-  //   outbound DEALERs set ZMQ_ROUTING_ID to their own device_uuid).
+  // sender_device_uuid: the peer's self-reported routing id/device_uuid.
+  //   NOT authenticated - an attacker can set this to anything. Only safe
+  //   to use as an opaque routing token (e.g. for reply_via_router).
   // peer_ip: best-effort source IP of the connection (from ZMQ's
   //   "Peer-Address" message metadata), empty if unavailable.
+  // sender_pubkey: the peer's CURVE-authenticated public key. On the
+  //   ROUTER path this comes from the ZAP handler's "User-Id" metadata
+  //   (cryptographically tied to the CURVE handshake). On the DEALER path
+  //   it's the pubkey *we* pinned the connection to via
+  //   ZMQ_CURVE_SERVERKEY when the dealer was created, which CURVE
+  //   guarantees the far end actually holds the secret key for. Either
+  //   way, this - not sender_device_uuid or any field inside the payload
+  //   - is the only trustworthy sender identity.
+  // via_router: true if received on the shared ROUTER socket (a peer
+  //   connected to us), false if received on a DEALER socket we opened
+  //   ourselves to a specific peer.
   using MessageCallback = std::function<void(
       const std::string& sender_device_uuid, const std::string& peer_ip,
+      const std::vector<uint8_t>& sender_pubkey, bool via_router,
       const std::vector<uint8_t>& payload)>;
 
   ZmqTransport(PubKey own_public_key, std::vector<uint8_t> own_secret_key,
@@ -64,6 +77,7 @@ class ZmqTransport {
   struct PeerDealer {
     zmq::socket_t socket;
     std::string endpoint;
+    PubKey peer_pubkey;
   };
   struct SendCommand {
     std::string own_device_uuid;
@@ -83,7 +97,7 @@ class ZmqTransport {
   void handle_command(const Command& cmd);
   void drain_router();
   void drain_dealer(const std::string& peer_device_uuid,
-                     zmq::socket_t& dealer);
+                     PeerDealer& peer_dealer);
   zmq::socket_t& get_or_create_dealer(const std::string& own_device_uuid,
                                        const std::string& peer_device_uuid,
                                        const PubKey& peer_pubkey,

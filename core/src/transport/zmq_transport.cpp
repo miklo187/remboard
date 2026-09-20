@@ -1,5 +1,7 @@
 #include "transport/zmq_transport.h"
 
+#include "identity/identity.h"
+
 namespace remboard {
 
 namespace {
@@ -85,7 +87,7 @@ zmq::socket_t& ZmqTransport::get_or_create_dealer(
   sock.connect(endpoint);
 
   auto [inserted_it, ok] = dealers_.emplace(
-      peer_device_uuid, PeerDealer{std::move(sock), endpoint});
+      peer_device_uuid, PeerDealer{std::move(sock), endpoint, peer_pubkey});
   return inserted_it->second.socket;
 }
 
@@ -115,6 +117,17 @@ std::string extract_peer_ip(zmq::message_t& payload) {
     return "";  // property unavailable
   }
 }
+
+// Recovers the CURVE-authenticated pubkey the ZAP handler stamped as the
+// "User-Id" metadata property (see zap_handler.cpp). Empty if the ZAP
+// handler didn't set one (e.g. non-CURVE mechanism, shouldn't happen here).
+std::vector<uint8_t> extract_authenticated_pubkey(zmq::message_t& payload) {
+  try {
+    return from_hex(payload.gets("User-Id"));
+  } catch (const zmq::error_t&) {
+    return {};
+  }
+}
 }  // namespace
 
 void ZmqTransport::drain_router() {
@@ -131,18 +144,21 @@ void ZmqTransport::drain_router() {
     std::string sender_uuid(static_cast<const char*>(routing_id.data()),
                              routing_id.size());
     std::string peer_ip = extract_peer_ip(payload);
+    std::vector<uint8_t> sender_pubkey = extract_authenticated_pubkey(payload);
 
     if (on_message_) {
       std::vector<uint8_t> bytes(
           static_cast<const uint8_t*>(payload.data()),
           static_cast<const uint8_t*>(payload.data()) + payload.size());
-      on_message_(sender_uuid, peer_ip, bytes);
+      on_message_(sender_uuid, peer_ip, sender_pubkey, /*via_router=*/true,
+                  bytes);
     }
   }
 }
 
 void ZmqTransport::drain_dealer(const std::string& peer_device_uuid,
-                                 zmq::socket_t& dealer) {
+                                 PeerDealer& peer_dealer) {
+  zmq::socket_t& dealer = peer_dealer.socket;
   while (true) {
     zmq::message_t payload;
     auto r = dealer.recv(payload, zmq::recv_flags::dontwait);
@@ -159,7 +175,8 @@ void ZmqTransport::drain_dealer(const std::string& peer_device_uuid,
       std::vector<uint8_t> bytes(
           static_cast<const uint8_t*>(payload.data()),
           static_cast<const uint8_t*>(payload.data()) + payload.size());
-      on_message_(peer_device_uuid, peer_ip, bytes);
+      on_message_(peer_device_uuid, peer_ip, peer_dealer.peer_pubkey,
+                  /*via_router=*/false, bytes);
     }
   }
 }
@@ -191,7 +208,7 @@ void ZmqTransport::io_loop() {
     if (items[0].revents & ZMQ_POLLIN) drain_router();
     for (size_t i = 0; i < dealer_uuids.size(); ++i) {
       if (items[i + 1].revents & ZMQ_POLLIN) {
-        drain_dealer(dealer_uuids[i], dealers_.at(dealer_uuids[i]).socket);
+        drain_dealer(dealer_uuids[i], dealers_.at(dealer_uuids[i]));
       }
     }
   }
