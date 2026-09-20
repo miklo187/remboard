@@ -123,6 +123,12 @@ constexpr int64_t kPairingTtlMs = 120'000;
 // INT32_MAX and force a huge allocation.
 constexpr int64_t kMaxFileTransferBytes = 2LL * 1024 * 1024 * 1024;  // 2 GiB
 constexpr size_t kMaxConcurrentTransfers = 8;
+constexpr int64_t kTransferIdleTimeoutMs = 10 * 60 * 1000;
+// Upper bound on disk held by in-flight transfers plus received-but-not-yet-
+// acted-on files, so a peer can't fill the disk by never finishing/never
+// being dismissed.
+constexpr int64_t kMaxStagingBytes = 4LL * 1024 * 1024 * 1024;  // 4 GiB
+constexpr size_t kMaxInboxItems = 500;
 
 // Strips any directory components from a peer-supplied file name so it can
 // never be used to write outside the intended staging directory.
@@ -789,7 +795,11 @@ class CoreImpl : public Core {
                             sanitize_file_name(fs_msg.file_name()));
 
     std::lock_guard<std::mutex> lock(state_mutex_);
+    purge_stale_transfers_locked();
     if (file_transfers_.size() >= kMaxConcurrentTransfers) return;
+    if (file_transfers_.count(fs_msg.transfer_id())) return;
+    if (staged_bytes_locked() + fs_msg.total_size_bytes() > kMaxStagingBytes)
+      return;
 
     file_transfers_[fs_msg.transfer_id()] = std::make_unique<FileReceiveState>(
         fs_msg.transfer_id(), dest.string(), fs_msg.total_chunks(),
@@ -800,6 +810,7 @@ class CoreImpl : public Core {
     meta.file_name = fs_msg.file_name();
     meta.mime_type = fs_msg.mime_type();
     meta.total_size = fs_msg.total_size_bytes();
+    meta.last_activity_ms = now_unix_ms();
     file_transfer_meta_[fs_msg.transfer_id()] = meta;
   }
 
@@ -807,10 +818,15 @@ class CoreImpl : public Core {
                           const DeviceInfo& sender_dev) {
     const auto& fc = env.file_chunk();
     std::lock_guard<std::mutex> lock(state_mutex_);
+    purge_stale_transfers_locked();
     auto it = file_transfers_.find(fc.transfer_id());
     if (it == file_transfers_.end()) return;  // unknown/expired transfer
     if (fc.index() < 0 || fc.index() >= it->second->total_chunks())
       return;  // out-of-range index; would otherwise throw out of write_chunk
+    if (auto m = file_transfer_meta_.find(fc.transfer_id());
+        m != file_transfer_meta_.end()) {
+      m->second.last_activity_ms = now_unix_ms();
+    }
     const std::string& data = fc.data();
     it->second->write_chunk(fc.index(),
                              std::vector<uint8_t>(data.begin(), data.end()));
@@ -883,9 +899,60 @@ class CoreImpl : public Core {
     deliver_item(item);
   }
 
+  static void remove_item_file(const IncomingItem& item) {
+    if (item.kind != ItemKind::kFile) return;
+    std::error_code ec;
+    std::filesystem::remove(item.file_path, ec);
+  }
+
+  // Caller holds state_mutex_.
+  void purge_stale_transfers_locked() {
+    const int64_t now = now_unix_ms();
+    for (auto it = file_transfer_meta_.begin();
+         it != file_transfer_meta_.end();) {
+      if (now - it->second.last_activity_ms <= kTransferIdleTimeoutMs) {
+        ++it;
+        continue;
+      }
+      if (auto t = file_transfers_.find(it->first); t != file_transfers_.end()) {
+        t->second->close();
+        std::error_code ec;
+        std::filesystem::remove(t->second->dest_path(), ec);
+        file_transfers_.erase(t);
+      }
+      it = file_transfer_meta_.erase(it);
+    }
+  }
+
+  // Caller holds state_mutex_.
+  int64_t staged_bytes_locked() const {
+    int64_t total = 0;
+    for (const auto& [id, meta] : file_transfer_meta_) total += meta.total_size;
+    for (const auto& [id, item] : received_items_) {
+      if (item.kind == ItemKind::kFile) total += item.file_size_bytes;
+    }
+    return total;
+  }
+
   void deliver_item(const IncomingItem& item) {
     {
       std::lock_guard<std::mutex> lock(state_mutex_);
+      // envelope_id is peer-chosen; don't leak the file of an item it replaces.
+      if (auto old = received_items_.find(item.envelope_id);
+          old != received_items_.end()) {
+        remove_item_file(old->second);
+        received_items_.erase(old);
+      }
+      // Bound the inbox: evict the oldest item(s) once full.
+      while (received_items_.size() >= kMaxInboxItems) {
+        auto oldest = std::min_element(
+            received_items_.begin(), received_items_.end(),
+            [](const auto& a, const auto& b) {
+              return a.second.received_at_unix_ms < b.second.received_at_unix_ms;
+            });
+        remove_item_file(oldest->second);
+        received_items_.erase(oldest);
+      }
       received_items_[item.envelope_id] = item;
     }
     if (on_incoming_item_) on_incoming_item_(item);
@@ -897,6 +964,7 @@ class CoreImpl : public Core {
     std::string file_name;
     std::string mime_type;
     int64_t total_size = 0;
+    int64_t last_activity_ms = 0;
   };
 
   PlatformHooks hooks_;
