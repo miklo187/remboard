@@ -13,6 +13,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstring>
 #include <filesystem>
 #include <mutex>
 #include <optional>
@@ -594,10 +595,10 @@ class CoreImpl : public Core {
       // they're not in device_store yet.
       if (via_router &&
           env.payload_case() == remboard::v1::Envelope::kPairRequest) {
-        handle_pair_request(env, sender_uuid, peer_ip);
+        handle_pair_request(env, sender_uuid, sender_pubkey, peer_ip);
       } else if (!via_router && env.payload_case() ==
                                      remboard::v1::Envelope::kPairResponse) {
-        handle_pair_response(env);
+        handle_pair_response(env, sender_uuid, sender_pubkey);
       }
       return;
     }
@@ -610,7 +611,9 @@ class CoreImpl : public Core {
         should_ack = false;  // already paired; nothing to do
         break;
       case remboard::v1::Envelope::kPairResponse:
-        handle_pair_response(env);
+        // Only meaningful on a DEALER we opened (re-pairing an already
+        // known device); never honor one arriving on the ROUTER.
+        if (!via_router) handle_pair_response(env, sender_uuid, sender_pubkey);
         should_ack = false;
         break;
       case remboard::v1::Envelope::kTextShare:
@@ -641,10 +644,25 @@ class CoreImpl : public Core {
     if (should_ack) send_ack(sender_uuid, env.envelope_id());
   }
 
+  static bool same_bytes(const std::string& a, const std::vector<uint8_t>& b) {
+    return a.size() == b.size() &&
+           (a.empty() || std::memcmp(a.data(), b.data(), a.size()) == 0);
+  }
+
+  // sender_pubkey is the CURVE-authenticated key of the connecting peer. The
+  // requester's self-reported pubkey must match it, and the fingerprint
+  // shown to the user is derived from it locally - never from pr.fingerprint().
   void handle_pair_request(const remboard::v1::Envelope& env,
                             const std::string& sender_uuid,
+                            const std::vector<uint8_t>& sender_pubkey,
                             const std::string& peer_ip) {
     const auto& pr = env.pair_request();
+    if (!same_bytes(pr.requester().curve_pubkey(), sender_pubkey)) return;
+    // A known device_uuid must never be re-bound to a different key.
+    if (auto existing = device_store_.find(pr.requester().device_uuid());
+        existing && existing->curve_pubkey != sender_pubkey) {
+      return;
+    }
     PairingRequest surfaced;
     bool valid = false;
     {
@@ -659,8 +677,7 @@ class CoreImpl : public Core {
         requester.device_uuid = pr.requester().device_uuid();
         requester.display_name = pr.requester().display_name();
         requester.platform = platform_from_string(pr.requester().platform());
-        const auto& pk = pr.requester().curve_pubkey();
-        requester.curve_pubkey.assign(pk.begin(), pk.end());
+        requester.curve_pubkey = sender_pubkey;
         requester.last_known_port =
             pr.requester_port() != 0
                 ? static_cast<uint16_t>(pr.requester_port())
@@ -678,32 +695,40 @@ class CoreImpl : public Core {
         surfaced.device_uuid = requester.device_uuid;
         surfaced.display_name = requester.display_name;
         surfaced.platform = requester.platform;
-        surfaced.fingerprint = pr.fingerprint();
+        surfaced.fingerprint = fingerprint_hex(sender_pubkey);
       }
     }
     if (valid && on_pairing_request_) on_pairing_request_(surfaced);
   }
 
-  void handle_pair_response(const remboard::v1::Envelope& env) {
+  // Arrives on a DEALER we opened from a scanned QR code, so sender_uuid and
+  // sender_pubkey are the peer uuid/key from that QR (the key CURVE pinned the
+  // connection to). The response must be from exactly that peer, and we must
+  // actually have a pairing request outstanding to it.
+  void handle_pair_response(const remboard::v1::Envelope& env,
+                             const std::string& sender_uuid,
+                             const std::vector<uint8_t>& sender_pubkey) {
     const auto& resp = env.pair_response();
     if (!resp.accepted()) return;
+    if (resp.responder().device_uuid() != sender_uuid ||
+        !same_bytes(resp.responder().curve_pubkey(), sender_pubkey)) {
+      return;
+    }
 
     DeviceInfo dev;
-    dev.device_uuid = resp.responder().device_uuid();
+    dev.device_uuid = sender_uuid;
     dev.display_name = resp.responder().display_name();
     dev.platform = platform_from_string(resp.responder().platform());
-    const auto& pk = resp.responder().curve_pubkey();
-    dev.curve_pubkey.assign(pk.begin(), pk.end());
+    dev.curve_pubkey = sender_pubkey;
     dev.paired_at_unix_ms = now_unix_ms();
 
     {
       std::lock_guard<std::mutex> lock(state_mutex_);
       auto it = outgoing_pairing_endpoints_.find(dev.device_uuid);
-      if (it != outgoing_pairing_endpoints_.end()) {
-        dev.last_known_ip = it->second.first;
-        dev.last_known_port = it->second.second;
-        outgoing_pairing_endpoints_.erase(it);
-      }
+      if (it == outgoing_pairing_endpoints_.end()) return;  // unsolicited
+      dev.last_known_ip = it->second.first;
+      dev.last_known_port = it->second.second;
+      outgoing_pairing_endpoints_.erase(it);
     }
 
     device_store_.upsert(dev);
