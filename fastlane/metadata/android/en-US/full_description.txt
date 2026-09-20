@@ -1,3 +1,5 @@
 Send text and files between your phone and PC over the local network, end-to-end encrypted with CurveZMQ (Curve25519), with no cloud service and no account.
 
 Pair with a PC by scanning a QR code; once paired, devices find each other automatically over mDNS.
+
+Requires the remboard desktop app on your PC. Windows: download the zip from https://github.com/miklo187/remboard/releases. Linux: build from source, see the README at https://github.com/miklo187/remboard.
