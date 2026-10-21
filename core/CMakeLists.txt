@@ -4,7 +4,6 @@
 # so it pulls in proto/ itself if not already present.
 
 find_package(Threads REQUIRED)
-find_package(PkgConfig REQUIRED)
 include(FetchContent)
 
 option(REMBOARD_VENDOR_DEPS "Fetch+build zmq/sodium/protobuf instead of using system packages" ${ANDROID})
@@ -154,6 +153,7 @@ if(REMBOARD_VENDOR_DEPS)
     FetchContent_MakeAvailable(protobuf)
   endif()
 else()
+  find_package(PkgConfig REQUIRED)
   pkg_check_modules(ZMQ REQUIRED IMPORTED_TARGET libzmq)
   pkg_check_modules(SODIUM REQUIRED IMPORTED_TARGET libsodium)
 endif()
@@ -163,6 +163,7 @@ if(NOT TARGET remboard_proto)
 endif()
 
 if(NOT ANDROID AND NOT WIN32)
+  find_package(PkgConfig REQUIRED)
   pkg_check_modules(AVAHI REQUIRED IMPORTED_TARGET avahi-client)
 endif()
 
