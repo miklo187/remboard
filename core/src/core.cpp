@@ -614,7 +614,16 @@ class CoreImpl : public Core {
     bool should_ack = true;
     switch (env.payload_case()) {
       case remboard::v1::Envelope::kPairRequest:
-        should_ack = false;  // already paired; nothing to do
+        // A device we already trust can still legitimately re-send a
+        // PairRequest - e.g. it lost its own record of this pairing (app
+        // reinstall, cleared data) while we kept ours. Re-run it the same
+        // as an unpaired request rather than silently dropping it: without
+        // this, that peer can never re-pair short of being removed here
+        // first, with no error or feedback telling anyone why.
+        if (via_router) {
+          handle_pair_request(env, sender_uuid, sender_pubkey, peer_ip);
+        }
+        should_ack = false;
         break;
       case remboard::v1::Envelope::kPairResponse:
         // Only meaningful on a DEALER we opened (re-pairing an already
